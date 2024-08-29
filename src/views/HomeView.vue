@@ -1,40 +1,48 @@
 <template>
   <div id="cesiumContainer" ref="cesiumContainer">
   </div>
+  <div id="coords" style="position: absolute; bottom: 10px; right: 50px; color: #444; font-size: 16px;">
+    X: 0, Y: 0, Z: 0
+  </div>
+  <div id="container"></div>
 </template>
 
 <script setup>
 import { onMounted } from "vue";
-import * as Cesium from "cesium";
 import "../Widgets/widgets.css";
-import * as THREE from "three";
 import { exportCesium, initCesium, renderCesium } from "../cesium/cesium_init.js";
-import { initThree, createMesh, renderThree } from "../three/three_init.js"
+import { initThree, createMesh, renderThree } from "../three/three_init.js";
+
+
 onMounted(() => {
   main();
 });
- 
+
 function main() {
-  // 设置北京显示模型的渲染范围(用于设置范围)
-  var minWGS84 = [116.7497, 34.7782];
-  var maxWGS84 = [116.8914, 34.8370];
+  // 设置显示模型的渲染范围(张双楼)
+  const minWGS84 = [116.7497, 34.7782];
+  const maxWGS84 = [116.8914, 34.8370];
+
   //初始化Cesium
-  initCesium(minWGS84, maxWGS84, cesiumContainer);
+  initCesium(minWGS84, maxWGS84);
   var cesium = exportCesium();
+
   //初始化Three
-  initThree(minWGS84, maxWGS84);
+  initThree(minWGS84, maxWGS84,);
   //创建物体
   createMesh(minWGS84, maxWGS84);
+
+  loop();
 
   //循环函数，不断请求动画帧渲染
   function loop() {
     requestAnimationFrame(loop);
-    // cesium渲染
-    renderCesium();
     // three.js渲染
     renderThree(cesium);
+    // cesium渲染
+    renderCesium();
+
   }
-  loop();
 }
 </script>
 
@@ -47,7 +55,7 @@ function main() {
 #cesiumContainer {
   width: 100vw;
   height: 100vh;
-  position: relative;
+  position: absolute
 }
 
 #cesiumContainer>canvas {
