@@ -14,11 +14,11 @@ Cesium.Camera.DEFAULT_VIEW_RECTANGLE = Cesium.Rectangle.fromDegrees(
 let cesium = {
   viewer: null,
 };
-function initCesium(minWGS84, maxWGS84, cesiumContainerid) {
-  console.log(minWGS84, maxWGS84);
-  var cesiumContainer = cesiumContainerid;
+
+// 初始化cesium场景
+function initCesium(minWGS84, maxWGS84) {
   // 设置cesium容器
-  var cesiumContainer = document.getElementById("cesiumContainer");
+  let cesiumContainer = document.getElementById("cesiumContainer");
   // 初始化cesium渲染器
   cesium.viewer = new Cesium.Viewer(cesiumContainer, {
     useDefaultRenderLoop: false,
@@ -84,7 +84,7 @@ function initCesium(minWGS84, maxWGS84, cesiumContainerid) {
   // 设置相机飞往该区域
   cesium.viewer.camera.flyTo({
     destination: center,
-    duration: 5,
+    duration: 4,
     //视角
     orientation: {
       heading: Cesium.Math.toRadians(10),
@@ -108,32 +108,23 @@ function initCesium(minWGS84, maxWGS84, cesiumContainerid) {
       positions: wallPositions,
       minimumHeights: [12, 12, 12, 12, 12],
       maximumHeights: new Cesium.CallbackProperty(function () {
-        let height = 1000 * Math.abs(Math.sin(Cesium.JulianDate.now().secondsOfDay));
+        // let height = 1000 ;
+        let height = 300 * Math.abs(Math.sin(Cesium.JulianDate.now().secondsOfDay));
         return [height, height, height, height, height];
       }, false),
-      material: Cesium.Color.YELLOW
+      // material: Cesium.Color.YELLOW
+      material: new Cesium.ColorMaterialProperty(new Cesium.CallbackProperty(function () {
+        // 动态设置透明度
+        // let alpha = 0.4;
+        let alpha = 0.5*Math.abs(Math.sin(Cesium.JulianDate.now().secondsOfDay));
+        return Cesium.Color.YELLOW.withAlpha(alpha);
+      }, false))
 
     },
   });
 
-  // // 设置裁剪平面
-  // let clippingPlanes = new Cesium.ClippingPlaneCollection({
-  //   planes: [
-  //     new Cesium.ClippingPlane(new Cesium.Cartesian3(1, 0, 0), -Cesium.Cartesian3.fromDegrees(minWGS84[0], 0, 0).x),
-  //     new Cesium.ClippingPlane(new Cesium.Cartesian3(-1, 0, 0), Cesium.Cartesian3.fromDegrees(maxWGS84[0], 0, 0).x),
-  //     new Cesium.ClippingPlane(new Cesium.Cartesian3(0, 1, 0), -Cesium.Cartesian3.fromDegrees(0, minWGS84[1], 0).y),
-  //     new Cesium.ClippingPlane(new Cesium.Cartesian3(0, -1, 0), Cesium.Cartesian3.fromDegrees(0, maxWGS84[1], 0).y)
-  //   ],
-  //   edgeWidth: 1.0,
-  //   edgeColor: Cesium.Color.WHITE,
-  //   unionClippingRegions: true // 确保使用联合裁剪区域
-  // });
-
-  // // 确保启用裁剪平面 
-  // clippingPlanes.enabled = true;
-  // cesium.viewer.scene.globe.clippingPlanes = clippingPlanes;
-
 }
+// 渲染cesium
 function renderCesium() {
   cesium.viewer.render();
 }

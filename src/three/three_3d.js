@@ -1,7 +1,6 @@
 import * as THREE from "three";
 import { grahamScan, TIN } from './Utils'
 import * as BufferGeometryUtils from 'three/examples/jsm/utils/BufferGeometryUtils.js';
-console.log(BufferGeometryUtils);
 
 // 坐标信息
 const drillData = [

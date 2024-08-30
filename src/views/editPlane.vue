@@ -2,37 +2,16 @@
     <div>
         <div id="container"></div>
         <div id="coords" style="position: absolute; top: 10px; left: 10px; color: #444; font-size: 16px;">
-            经度: 0, 纬度: 0, 高度: 0
+            经度: 0,纬度: 0,高度: 0
         </div>
         <button style="position: absolute; top: 10px; right: 10px; color: #444; font-size: 16px;" @click="saveGeometry">
-            <b>保存场景</b>
+            <b> 保存场景</b>
         </button>
-
-        <!-- 表格来展示所有点的信息 -->
-        <div style="position: absolute; top: 50px; left: 10px; max-height: 300px; overflow-y: scroll;">
-            <table border="1">
-                <thead>
-                    <tr>
-                        <th>Index</th>
-                        <th>X</th>
-                        <th>Y</th>
-                        <th>Z</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <tr v-for="(vertex, index) in vertices" :key="index">
-                        <td>{{ index + 1 }}</td>
-                        <td>{{ vertex.x.toFixed(3) }}</td>
-                        <td>{{ vertex.y.toFixed(3) }}</td>
-                        <td>{{ vertex.z.toFixed(3) }}</td>
-                    </tr>
-                </tbody>
-            </table>
-        </div>
     </div>
 </template>
+
 <script setup>
-import {ref, onMounted } from 'vue';
+import { onMounted } from 'vue';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { TransformControls } from 'three/examples/jsm/controls/TransformControls.js';
@@ -44,7 +23,7 @@ import * as BufferGeometryUtils from 'three/examples/jsm/utils/BufferGeometryUti
 // 创建一个 Map 来按材质存储几何体
 const materialGeometriesMap = new Map();
 let selectedObject = null; // 存储当前选中的对象
-const vertices = ref([]); // 用于存储点信息
+
 let container;
 let camera, scene, renderer;
 let HelperObjects = [];
@@ -141,17 +120,16 @@ function displayPoints(mergedGeometry) {
     // 取出合并后的所有点
     const positions = mergedGeometry.attributes.position.array;
     for (let i = 0; i < positions.length; i += 3) {
-        const vertex = {
-            x: positions[i],
-            y: positions[i + 1],
-            z: positions[i + 2]
-        };
-        vertices.value.push(vertex); // 将每个点添加到 vertices 数组中
+        let vertices = [];
+
+        // 提取X, Y, Z坐标
+        vertices.push(positions[i]);   // X
+        vertices.push(positions[i + 1]); // Y
+        vertices.push(positions[i + 2]); // Z
 
         // console.log(positions);
         const geometry = new THREE.BufferGeometry();
-        geometry.setAttribute('position', new THREE.Float32BufferAttribute([vertex.x, vertex.y, vertex.z], 3));
-
+        geometry.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
 
         const material = new THREE.PointsMaterial({ color: 0xff0000, size: 2 });
 

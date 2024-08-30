@@ -6,6 +6,8 @@ import DxfParser from 'dxf-parser';
 
 const dxfFilePath = '/Drawing4.dxf'
 const dxf_22910 = '/22910.dxf'
+const dxf_22910Plane2 = '/22910Plane2.dxf'
+
 
 // 获取数据
 export async function DXFtoThreeAll() {
@@ -24,14 +26,14 @@ export async function DXFtoThreeAll() {
 
         // console.log(dxfData);
 
-        return dxfData; 
+        return dxfData;
     } catch (error) {
         console.error('加载DXF错误:', error);
     }
 }
 export async function DXFtoThree() {
     try {
-        const response = await fetch(dxf_22910);
+        const response = await fetch(dxf_22910Plane2);
         if (!response.ok) {
             throw new Error('Network response was not ok');
         }
@@ -45,7 +47,7 @@ export async function DXFtoThree() {
 
         // console.log(dxfData);
 
-        return dxfData; 
+        return dxfData;
     } catch (error) {
         console.error('加载DXF错误:', error);
     }
@@ -179,7 +181,7 @@ function drawEntity(entity, data, font, scene) {
     // console.log(entity);
     // 绘制实体的顶点为红色点
     let points = drawVerticesAsPoints(entity, scene);
-    
+
     var mesh;
 
     // 根据实体类型调用相应的绘制函数

@@ -2,13 +2,16 @@
   <div id="cesiumContainer" ref="cesiumContainer">
   </div>
   <div id="coords" style="position: absolute; bottom: 10px; right: 50px; color: #444; font-size: 16px;">
-    X: 0, Y: 0, Z: 0
+    <button type="primary" @click="editPoint" v-show="isEditButtonVisible" >
+      编辑
+    </button>
   </div>
   <div id="container"></div>
 </template>
 
 <script setup>
-import { onMounted } from "vue";
+import { ref, onMounted, onUnmounted } from "vue";
+import { useRouter } from "vue-router";
 import "../Widgets/widgets.css";
 import { exportCesium, initCesium, renderCesium } from "../cesium/cesium_init.js";
 import { initThree, createMesh, renderThree } from "../three/three_init.js";
@@ -16,6 +19,16 @@ import { initThree, createMesh, renderThree } from "../three/three_init.js";
 
 onMounted(() => {
   main();
+  if (window.eventBus) {
+    window.eventBus.addEventListener("planeChanged", handlePlaneChange);
+  }
+
+});
+onUnmounted(() => {
+  // 移除事件监听
+  if (window.eventBus) {
+    window.eventBus.removeEventListener("planeChanged", handlePlaneChange);
+  }
 });
 
 function main() {
@@ -44,6 +57,18 @@ function main() {
 
   }
 }
+const isEditButtonVisible = ref(false); // Vue响应式数据
+
+function handlePlaneChange(event) {
+  isEditButtonVisible.value = event.detail.is22910;
+}
+
+const router = useRouter();
+
+//点击按钮实现路由跳转
+function editPoint() {
+  router.push({ name: "edit" });
+}
 </script>
 
 <style>
@@ -55,7 +80,7 @@ function main() {
 #cesiumContainer {
   width: 100vw;
   height: 100vh;
-  position: absolute
+  position: relative
 }
 
 #cesiumContainer>canvas {

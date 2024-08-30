@@ -9,7 +9,6 @@ import { useRouter } from 'vue-router';  // 引入useRouter
 // import { TextGeometry } from 'three/examples/jsm/geometries/TextGeometry.js';
 // 22910工作面
 import { PointCad } from './three_cad_point';
-import { TransformControls } from 'three/examples/jsm/controls/TransformControls.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { denormalize } from './Utils';
 
@@ -28,8 +27,9 @@ const positions = [];// 存储点的位置
 const raycaster = new THREE.Raycaster(); // 创建射线投射器，用于检测鼠标与物体的交互
 const pointer = new THREE.Vector2(); // 存储鼠标指针的二维位置
 
-let transformControl;// 定义一个变量来存储变换控制器
 
+// 假设你有一个全局事件对象
+window.eventBus = new EventTarget();
 
 // three.js物体
 let objects3D = [];
@@ -46,7 +46,7 @@ function initThree() {
   cesiumContainer = document.getElementById('cesiumContainer');
   // 1..初始化场景
   scene = new THREE.Scene();
-  scene.background = new THREE.Color().setStyle('rgba(255, 250, 250, 1)'); // 透明度为 0.
+  // scene.background = new THREE.Color().setStyle('rgba(255, 250, 250, 1)'); // 透明度为 0.
 
   // 2.设置渲染器大小
   renderer = new THREE.WebGLRenderer({
@@ -67,20 +67,8 @@ function initThree() {
   controls.damping = 0.2;
   controls.addEventListener('change', renderThree);
 
-  // 设置变换控制器
-  // 限制移动方向，只允许在 Z 轴上移动
-  transformControl = new TransformControls(camera, renderer.domElement)
-  // transformControl.showX = false;
-  // transformControl.showY = true;
-  // transformControl.showZ = true;
-  transformControl.size = 0.7;
-  // transformControl.rotateZ(Math.PI/2); // 旋转180度  
-  scene.add(transformControl);
 
 
-  transformControl.addEventListener('objectChange', function () {
-    updateCoords();
-  });
 
   // 监听鼠标事件
   document.addEventListener('pointermove', onPointerMove);
@@ -291,34 +279,42 @@ function addGUI(lines) {
         scene.add(pointGroup);
         scene.add(planeGroup);
         scene.remove(meshGroup);
+        // scene.background = new THREE.Color().setStyle('rgba(255, 250, 250, 1)'); // 透明度为 0.
+
       }
-      // 路由跳转到 /edit
-      // router.push({ name: 'edit' });
+      window.eventBus.dispatchEvent(new CustomEvent('planeChanged', { detail: { is22910: true } }));
+
     } else {
       if (scene.children.includes(pointGroup)) {
         scene.remove(pointGroup);
         scene.remove(planeGroup);
         scene.add(meshGroup);
       }
+      window.eventBus.dispatchEvent(new CustomEvent('planeChanged', { detail: { is22910: false } }));
+
     }
 
-    // 方案一
-    // if (value === '22910') {
-    //   // 清理当前场景
-    //   while (scene.children.length > 0) {
-    //     scene.remove(scene.children[0]);
-    //   }
-
-    //   // 初始化新场景
-    //   const newSceneData = initNewScene();
-    //   scene = newSceneData.scene;
-    //   camera = newSceneData.camera;
-
-    //   // 在新场景中创建和添加22910工作面模型
-    //   createMeshForNewScene();
-    // } 
 
   });
+
+  const paramPane = {
+    selectedPlane: '天地图',
+  };
+    // 添加背景单选框
+    const backgroundOptions = {
+      '天地图': '天地图',
+      '无': '无'
+    };
+  
+    gui.add(backgroundOptions, '天地图', backgroundOptions).name('底图').onChange(function (value) {
+      if (value === '天地图') {
+        scene.background = null;
+
+      } else if (value === '无') {
+        scene.background = new THREE.Color().setStyle('rgba(255, 250, 250, 1)');
+
+      }
+    });
 
   // 其他控件，如复选框等
   const visibility = {
@@ -337,33 +333,9 @@ function addGUI(lines) {
   gui.close();
 }
 
-// 更新Z坐标
-function updateCoords() {
-  const object = transformControl.object;
-  const minX = 39476000;
-  const maxX = 39489000;
-  const minY = 3849500;
-  const maxY = 3856000;
-  if (object) {
-    const objectPos = object.geometry.attributes.position.array
-    const originalX = denormalize(objectPos[0], minX, maxX)
-    const originalY = denormalize(objectPos[1], minY, maxY)
-
-
-    const coordsDiv = document.getElementById('coords');
-    coordsDiv.innerHTML = `X: ${originalX.toFixed(3)}, Z: ${originalY.toFixed(3)}, Y:<input type="number" id="y-input" step="1" value=${objectPos[2].toFixed(3)}> `;
-
-    // 添加输入框事件监听器
-    const Input = document.getElementById('y-input');
-    Input.addEventListener('change', function () {
-      object.position.y = parseFloat(Input.value);
-    });
-  }
-}
 
 // 处理鼠标移动事件
 function onPointerMove(event) {
-  updateCoords(); // 选中立方体时立即更新坐标
 
   pointer.x = (event.clientX / window.innerWidth) * 2 - 1;
   pointer.y = -(event.clientY / window.innerHeight) * 2 + 1;
@@ -375,27 +347,7 @@ function onPointerMove(event) {
   if (intersects.length > 0) {
     const object = intersects[0].object;
 
-    if (object !== transformControl.object) {
-      // 恢复上一个选中的对象的颜色
-      if (selectedObject) {
-        selectedObject.material.color.set(0xff0000); // 恢复为红色
-      }
-
-      // 将当前对象变为绿色
-      object.material.color.set(0x00ff00);
-
-      transformControl.attach(object);
-      updateCoords(); // 选中立方体时立即更新坐标
-
-      // 更新选中的对象
-      selectedObject = object;
-    }
-  } else {
-    // 如果没有选中任何对象，恢复上一个选中对象的颜色
-    if (selectedObject) {
-      selectedObject.material.color.set(0xff0000); // 恢复为红色
-      selectedObject = null; // 清除选中对象
-    }
+   
   }
 }
 
