@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { normalize,denormalize } from './Utils';
+import { normalize } from './Utils';
 import DxfParser from 'dxf-parser';
 
 const dxf_22910 = '/22910.dxf'
@@ -44,37 +44,10 @@ async function Viewer(data) {
 // 绘制实体
 function drawEntity(entity, scene) {
     let mesh = drawPoints(entity, scene);
-    // console.log(...mesh);
 
-    // if (mesh) {
-    //     mesh.userData.layer = entity.layer;
-    //     mesh.userData.type = entity.type;
-    //     if (entity.color) {
-    //         mesh.userData.color = entity.color;
-    //     }
-    // }
     return mesh;
 }
 
-// 绘制坐标点
-// function drawPoints(entity) {
-//     if (entity.vertices && entity.vertices.length > 0) {
-//         const points = [];
-//         for (let i = 0; i < entity.vertices.length; i++) {
-//             const vertex = entity.vertices[i];
-//             let position_X = normalize(vertex.x, 39476000, 39489000); // Normalize x
-//             let position_Y = normalize(vertex.y, 3849500, 3856000); // Normalize y
-
-//             points.push(new THREE.Vector3(position_X, position_Y, 0));
-//         }
-
-//         const geometry = new THREE.BufferGeometry().setFromPoints(points);
-//         const material = new THREE.PointsMaterial({ color: 0xff0000, size: 7 });
-
-//         const pointCloud = new THREE.Points(geometry, material);
-//         return pointCloud;
-//     }
-// }
 function drawPoints(entity) {
     if (entity.vertices && entity.vertices.length > 0) {
         const pointClouds = [];

@@ -1,6 +1,8 @@
 import { createRouter, createWebHashHistory } from 'vue-router'
 import HomeView from '../views/HomeView.vue'
 import ThreeView from '../views/ThreeView.vue'
+import editPlane from '../views/editPlane.vue'
+
 
 
 const routes = [
@@ -13,6 +15,11 @@ const routes = [
     path: '/edit',
     name: 'edit',
     component: ThreeView
+  },
+  {
+    path: '/plane',
+    name: 'plane',
+    component: editPlane
   },
  
 ]

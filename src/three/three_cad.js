@@ -6,7 +6,11 @@ import DxfParser from 'dxf-parser';
 
 const dxfFilePath = '/Drawing4.dxf'
 const dxf_22910 = '/22910.dxf'
-const dxf_22910Plane2 = '/22910Plane2.dxf'
+const InnerLine = '/22910Plane_in.dxf'
+const OutLine = '/22910Plane_out.dxf'
+const Tunnel = '/tunnel.dxf'
+
+
 
 
 // 获取数据
@@ -31,9 +35,9 @@ export async function DXFtoThreeAll() {
         console.error('加载DXF错误:', error);
     }
 }
-export async function DXFtoThree() {
+export async function DXFtoPlane() {
     try {
-        const response = await fetch(dxf_22910Plane2);
+        const response = await fetch(dxf_22910);
         if (!response.ok) {
             throw new Error('Network response was not ok');
         }
@@ -52,6 +56,51 @@ export async function DXFtoThree() {
         console.error('加载DXF错误:', error);
     }
 }
+
+export async function FetchInnerLine() {
+    try {
+        const response = await fetch(Tunnel);
+        if (!response.ok) {
+            throw new Error('Network response was not ok');
+        }
+
+        const dxfText = await response.text();
+
+        // 创建一个DxfParser实例，用于解析DXF文件内容
+        var parser = new DxfParser();
+        var dxf = parser.parseSync(dxfText);
+        let dxfData = await Viewer(dxf)
+
+        // console.log(dxfData);
+
+        return dxfData;
+    } catch (error) {
+        console.error('加载DXF错误:', error);
+    }
+}
+
+export async function FetchOutLine() {
+    try {
+        const response = await fetch(OutLine);
+        if (!response.ok) {
+            throw new Error('Network response was not ok');
+        }
+
+        const dxfText = await response.text();
+
+        // 创建一个DxfParser实例，用于解析DXF文件内容
+        var parser = new DxfParser();
+        var dxf = parser.parseSync(dxfText);
+        let dxfData = await Viewer(dxf)
+
+        // console.log(dxfData);
+
+        return dxfData;
+    } catch (error) {
+        console.error('加载DXF错误:', error);
+    }
+}
+
 function Viewer(data) {
     var font;
     var loader = new FontLoader();
@@ -132,18 +181,14 @@ function Viewer(data) {
                 }
                 obj = null;
             }
-            //res_entities中实体
-            // console.log('按图层分类后的所有实体：\n', res_entities);
-
-            // scene.add(mesh);
-            // 基础线条材质
-            var line_material = new THREE.LineBasicMaterial({ vertexColors: true });
+          
+            var line_material = new THREE.LineBasicMaterial({ vertexColors: true , linewidth: 200});
             // 虚线材质(LineDashedMaterial)
-            var dash_material = new THREE.LineDashedMaterial({ vertexColors: true, dashSize: 3, gapSize: 1, linewidth: 2 });
+            var dash_material = new THREE.LineDashedMaterial({ vertexColors: true, dashSize: 3, gapSize: 1, linewidth: 200 });
 
             // 遍历所有实体并根据类型创建网格对象
             for (var key in res_entities) {
-                console.log('实体类型', key);
+                // console.log('实体类型', key);
 
                 var mesh, ent = new THREE.BufferGeometry();
 
@@ -236,10 +281,7 @@ function drawEntity(entity, data, font, scene) {
         mesh.userData.layer = entity.layer;
         // 将实体的类型信息保存到 mesh 的用户数据中
         mesh.userData.type = entity.type;
-        // if(entity.lineType){
-        //     // 如果实体有线型属性，保存线型信息到 mesh 的用户数据中 
-        //     mesh.userData.lineType = data.tables.lineType.lineTypes[entity.lineType];
-        // } 
+      
         // 如果实体有颜色属性，保存颜色信息到 mesh 的用户数据中
         if (entity.color) {
             mesh.userData.color = entity.color;
@@ -300,9 +342,9 @@ function drawLine(entity, data) {
     }
 
     if (lineType && lineType.pattern && lineType.pattern.length !== 0) {
-        material = new THREE.LineDashedMaterial({ color: color, gapSize: 1, dashSize: 2 });
+        material = new THREE.LineDashedMaterial({ color: color, linewidth: 2000,gapSize: 1, dashSize: 2 });
     } else {
-        material = new THREE.LineBasicMaterial({ linewidth: 1, color: color });
+        material = new THREE.LineBasicMaterial({ color: color ,linewidth: 2000, });
     }
 
     const line = new THREE.Line(geometry, material);

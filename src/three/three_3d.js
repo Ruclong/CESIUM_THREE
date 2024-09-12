@@ -88,6 +88,7 @@ export async function createZhu(holeData, color) {
     const filteredData = data.filter(row => row[0] != null || row[1] != null);
 
     const points = filteredData.map(row => [row[0], row[1]]);
+    
     const hull = grahamScan(points);
     const boundaryData = hull.map(point => {
         const original = data.find(row => row[0] === point[0] && row[1] === point[1]);

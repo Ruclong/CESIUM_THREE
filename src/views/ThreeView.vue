@@ -2,49 +2,28 @@
     <div>
         <div id="container"></div>
         <div id="coords" style="position: absolute; top: 10px; left: 10px; color: #444; font-size: 16px;">
-            经度: 0, 纬度: 0, 高度: 0
-        </div>
-        <button style="position: absolute; top: 10px; right: 10px; color: #444; font-size: 16px;" @click="saveGeometry">
-            <b>保存场景</b>
-        </button>
-
-        <!-- 表格来展示所有点的信息 -->
-        <div style="position: absolute; top: 50px; left: 10px; max-height: 300px; overflow-y: scroll;">
-            <table border="1">
-                <thead>
-                    <tr>
-                        <th>Index</th>
-                        <th>X</th>
-                        <th>Y</th>
-                        <th>Z</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <tr v-for="(vertex, index) in vertices" :key="index">
-                        <td>{{ index + 1 }}</td>
-                        <td>{{ vertex.x.toFixed(3) }}</td>
-                        <td>{{ vertex.y.toFixed(3) }}</td>
-                        <td>{{ vertex.z.toFixed(3) }}</td>
-                    </tr>
-                </tbody>
-            </table>
+            经度: 0,纬度: 0,高度: 0
         </div>
     </div>
 </template>
+
 <script setup>
-import {ref, onMounted } from 'vue';
+import { onMounted } from 'vue';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { TransformControls } from 'three/examples/jsm/controls/TransformControls.js';
-import { DXFtoThreeAll, DXFtoThree } from '../three/three_cad';
+import { FetchOutLine,FetchInnerLine } from '../three/three_cad';
 import { denormalize } from '../three/Utils';
 import * as BufferGeometryUtils from 'three/examples/jsm/utils/BufferGeometryUtils.js';
-
+import { LineMaterial } from 'three/examples/jsm/lines/LineMaterial.js';
+import { LineGeometry } from 'three/examples/jsm/lines/LineGeometry.js';
+import { LineSegments2 } from 'three/examples/jsm/lines/LineSegments2.js';
+import { Line2 } from 'three/examples/jsm/lines/Line2.js';
 
 // 创建一个 Map 来按材质存储几何体
-const materialGeometriesMap = new Map();
+// const materialGeometriesMap = new Map();
 let selectedObject = null; // 存储当前选中的对象
-const vertices = ref([]); // 用于存储点信息
+
 let container;
 let camera, scene, renderer;
 let HelperObjects = [];
@@ -54,119 +33,59 @@ const pointer = new THREE.Vector2();
 const onUpPosition = new THREE.Vector2();
 const onDownPosition = new THREE.Vector2();
 let transformControl;
-let mergedGeometry; // 合并后几何体
+// let mergedInnerLine, mergedOutLine; // 合并后几何体
 
 onMounted(() => {
     init();
-
     document.addEventListener('pointerdown', onPointerDown);
     document.addEventListener('pointerup', onPointerUp);
     document.addEventListener('pointermove', onPointerMove);
 });
 
+
 async function init() {
     //基础场景设置
     basicInit();
 
-    // 22910工作面
-    const dxf_22910 = await DXFtoThree();
-    // console.log(dxf_22910);
-
-    // 将工作面平移到原点
-    dxf_22910.forEach(lineSegment => {
-        // console.log(lineSegment);
-        // 更新几何体的世界矩阵
-        lineSegment.updateMatrix();
-        // 获取当前几何体
-        const geometry = lineSegment.geometry.clone().applyMatrix4(lineSegment.matrix);
-        // 获取当前材质
-        const material = lineSegment.material;
-        // 如果该材质已有存储的几何体，添加到数组，否则创建一个新的数组
-        if (!materialGeometriesMap.has(material)) {
-            materialGeometriesMap.set(material, []);
-        }
-        materialGeometriesMap.get(material).push(geometry);
-    });
-
-    // 遍历材质-几何体对，合并几何体
-    materialGeometriesMap.forEach((geometries, material) => {
-        // 合并几何体
-        mergedGeometry = BufferGeometryUtils.mergeGeometries(geometries, true);
-
-        // 创建新的 LineSegments 对象
-        const mergedLineSegments = new THREE.LineSegments(mergedGeometry, material);
-
-        // 应用平移、缩放和旋转变换
-        mergedLineSegments.position.set(1300, 0, 120);
-        mergedLineSegments.scale.set(6100, 3050, 1);
-        mergedLineSegments.rotateX(Math.PI / 2);
-
-        // 将合并后的 LineSegments 添加到场景
-        scene.add(mergedLineSegments);
-        // console.log(mergedGeometry);
-        // 显示几何体所有点并创建修改Y值的UI
-        displayPoints(mergedGeometry);
-    });
-
+    // 22910工作面内外圈数据
+    const OutLine = await FetchOutLine();
+    console.log(OutLine);
+    
+    CreateLine(OutLine)
     render();
 }
 
-function saveGeometry() {
-    const strplace = mergedGeometry.attributes.position.array;
-    const formattedPositions = [];
-    // const originalX = 
-    // const originalZ = 
-    for (let i = 0; i < strplace.length; i += 3) {
-        // 每三个数据表示一个点的 x, y, z
-        const x = denormalize(strplace[i].toFixed(3), 39476000, 39489000);
-        const z = denormalize(strplace[i + 1].toFixed(3), 3849500, 3856000);
-        const h = strplace[i + 2].toFixed(3);
+function CreateLine(GeometryLine) {
 
-        // 格式化输出为 "x= , y= , z= "
-        const formattedPosition = `x= ${x}, z= ${z},h= ${h}`;
-        formattedPositions.push(formattedPosition);
-    }
+    GeometryLine.forEach(lineSegment => {
 
-    // 将所有位置格式化为字符串
-    const code = '[' + (formattedPositions.join(',\n\t')) + ']';
+        const posArray = lineSegment.geometry.attributes.position.array;
+        let positions = [];
 
-    // 输出到控制台
-    console.log(formattedPositions.join(',\n'));
-
-    // 通过 prompt 弹出框显示可复制的代码
-    prompt('保存高度信息', code);
-}
-
-function displayPoints(mergedGeometry) {
-    // 取出合并后的所有点
-    const positions = mergedGeometry.attributes.position.array;
-    for (let i = 0; i < positions.length; i += 3) {
-        const vertex = {
-            x: positions[i],
-            y: positions[i + 1],
-            z: positions[i + 2]
-        };
-        vertices.value.push(vertex); // 将每个点添加到 vertices 数组中
-
+        for (let i = 0; i < posArray.length; i++) {
+            positions.push(posArray[i]); // 传递每个顶点的 x, y, z 坐标
+        }
         // console.log(positions);
-        const geometry = new THREE.BufferGeometry();
-        geometry.setAttribute('position', new THREE.Float32BufferAttribute([vertex.x, vertex.y, vertex.z], 3));
+        
+        const lineGeometry = new LineGeometry();
+        lineGeometry.setPositions(posArray);
 
+        const lineMaterial = new LineMaterial({
+            color: 0x4F4F4F,
+            linewidth: 10,
+        });
 
-        const material = new THREE.PointsMaterial({ color: 0xff0000, size: 2 });
+        const mergedLineSegments = new LineSegments2(lineGeometry, lineMaterial);
 
-        const object = new THREE.Points(geometry, material);
+        mergedLineSegments.position.set(1300, 0, 120);
+        mergedLineSegments.scale.set(6100, 3050, 1);
+        mergedLineSegments.rotateX(Math.PI / 2);
+        scene.add(mergedLineSegments)
+    });
 
-        // 应用平移、缩放和旋转变换
-        object.position.set(1300, 0, 120);
-        object.scale.set(6100, 3050, 1);
-        object.rotateX(Math.PI / 2);
-        // console.log(object);
-        scene.add(object);
-        HelperObjects.push(object);
-    }
 
 }
+
 
 function render() {
     renderer.render(scene, camera);

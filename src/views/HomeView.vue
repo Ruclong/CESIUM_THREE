@@ -2,8 +2,8 @@
   <div id="cesiumContainer" ref="cesiumContainer">
   </div>
   <div id="coords" style="position: absolute; bottom: 10px; right: 50px; color: #444; font-size: 16px;">
-    <button type="primary" @click="editPoint" v-show="isEditButtonVisible" >
-      编辑
+    <button type="primary" @click="editPoint" v-show="isEditButtonVisible">
+      预览
     </button>
   </div>
   <div id="container"></div>
@@ -67,8 +67,19 @@ const router = useRouter();
 
 //点击按钮实现路由跳转
 function editPoint() {
-  router.push({ name: "edit" });
+  router.push({ name: "plane" });
 }
+// 监听路由变化后刷新
+router.beforeEach((to, from, next) => {
+  if (to.name === 'plane') {
+    next(); // 先完成路由跳转
+    setTimeout(() => {
+      window.location.reload(true); // 使用 true 强制从服务器重新加载，而不是从缓存
+    }, 0);
+  } else {
+    next();
+  }
+});
 </script>
 
 <style>

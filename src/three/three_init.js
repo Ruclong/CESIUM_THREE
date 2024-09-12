@@ -1,7 +1,7 @@
 import * as THREE from "three";
 import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js'; //导入gui面板
 import * as Cesium from "cesium";
-import { DXFtoThreeAll, DXFtoThree } from './three_cad';
+import { DXFtoThreeAll,DXFtoPlane } from './three_cad';
 import { useRouter } from 'vue-router';  // 引入useRouter
 // import { createZhu } from './three_3d'
 // import { FontLoader } from 'three/examples/jsm/loaders/FontLoader.js';  // 导入字体加载器
@@ -102,7 +102,7 @@ async function createMesh(minWGS84, maxWGS84) {
     meshGroup.add(lineSegments);
   }
 
-  const dxf_22910 = await DXFtoThree();
+  const dxf_22910 = await DXFtoPlane();
   for (let i = 0; i < dxf_22910.length; i++) {
     let lines = dxf_22910[i]
     lines.scale.set(6100, 3050, 1000); // 放大
