@@ -181,8 +181,8 @@ function Viewer(data) {
                 }
                 obj = null;
             }
-          
-            var line_material = new THREE.LineBasicMaterial({ vertexColors: true , linewidth: 200});
+
+            var line_material = new THREE.LineBasicMaterial({ vertexColors: true, linewidth: 200 });
             // 虚线材质(LineDashedMaterial)
             var dash_material = new THREE.LineDashedMaterial({ vertexColors: true, dashSize: 3, gapSize: 1, linewidth: 200 });
 
@@ -281,7 +281,7 @@ function drawEntity(entity, data, font, scene) {
         mesh.userData.layer = entity.layer;
         // 将实体的类型信息保存到 mesh 的用户数据中
         mesh.userData.type = entity.type;
-      
+
         // 如果实体有颜色属性，保存颜色信息到 mesh 的用户数据中
         if (entity.color) {
             mesh.userData.color = entity.color;
@@ -342,9 +342,9 @@ function drawLine(entity, data) {
     }
 
     if (lineType && lineType.pattern && lineType.pattern.length !== 0) {
-        material = new THREE.LineDashedMaterial({ color: color, linewidth: 2000,gapSize: 1, dashSize: 2 });
+        material = new THREE.LineDashedMaterial({ color: color, linewidth: 2000, gapSize: 1, dashSize: 2 });
     } else {
-        material = new THREE.LineBasicMaterial({ color: color ,linewidth: 2000, });
+        material = new THREE.LineBasicMaterial({ color: color, linewidth: 2000, });
     }
 
     const line = new THREE.Line(geometry, material);
