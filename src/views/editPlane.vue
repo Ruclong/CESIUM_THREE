@@ -1,91 +1,56 @@
 <template>
     <div>
         <div id="container"></div>
-        <div id="coords" class="coords-display">
-            经度: 0, 纬度: 0, 高度: 0
-        </div>
-        <button class="save-button" @click="saveGeometry">
-            保存场景
-        </button>
-        <!-- 表格来展示所有点的信息 -->
-        <div style="position: absolute; top: 50px; left: 10px; max-height: 300px; overflow-y: scroll; opacity: 0;">
-            <table border="1">
-                <thead>
-                    <tr>
-                        <th>索引</th>
-                        <th>X</th>
-                        <th>Y</th>
-                        <th>Z</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <tr v-for="(vertex, index) in vertices" :key="vertex.id"
-                        :class="{ 'highlight': selectedIndex === index }">
-                        <td>{{ index + 1 }}</td>
-                        <td>{{ vertex.x.toFixed(3) }}</td>
-                        <td>{{ vertex.y.toFixed(3) }}</td>
-                        <td>{{ vertex.z.toFixed(3) }}</td>
-                    </tr>
-
-                </tbody>
-            </table>
-        </div>
+        <button class="expand" @click="expand">展开</button>
+        <button class="collapse" @click="collapse">闭合</button>
     </div>
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue';
+import {  onMounted } from 'vue';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { TransformControls } from 'three/examples/jsm/controls/TransformControls.js';
 import { FetchOutLine } from '../three/three_cad';
 import { DrawTunnel } from '../three/edit';
-import { denormalize } from '../three/Utils';
 import * as BufferGeometryUtils from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { grahamScan, TIN } from '../three/Utils'
 import { LineMaterial } from 'three/examples/jsm/lines/LineMaterial.js';
 import { LineGeometry } from 'three/examples/jsm/lines/LineGeometry.js';
-import { LineSegments2 } from 'three/examples/jsm/lines/LineSegments2.js';
 import { Line2 } from 'three/examples/jsm/lines/Line2.js';
 import { ImprovedNoise } from 'three/examples/jsm/math/ImprovedNoise.js';
+import * as TWEEN from '@tweenjs/tween.js';
 
+// 创建 TWEEN 组
+const tweenGroup = new TWEEN.Group();
 
-// 创建一个 Map 来按材质存储几何体
-const materialGeometriesMap = new Map();
-let selectedObject = null; // 存储当前选中的对象
 let container;
 let camera, scene, renderer;
-let HelperObjects = [];
+let plane, cube, cube2, cube3;
 
-//用于表格渲染
-const vertices = ref([]); // 用于存储点信息
-const selectedIndex = ref(-1);  // 默认-1表示没有选中任何对象
-
-const raycaster = new THREE.Raycaster();
-const pointer = new THREE.Vector2();
-const onUpPosition = new THREE.Vector2();
-const onDownPosition = new THREE.Vector2();
 let transformControl;
-let geometryTop, geometryBottom, sideGeometry; // 合并后几何体
+let geometryTop, geometryBottom; // 合并后几何体
 
 onMounted(() => {
     init();
-
-    document.addEventListener('pointerdown', onPointerDown);
-    document.addEventListener('pointerup', onPointerUp);
-    document.addEventListener('pointermove', onPointerMove);
+    animate();
 });
 
 async function init() {
     //基础场景设置
     basicInit();
-
     // 巷道
-    const Tunnels = await DrawTunnel()
-    // console.log(Tunnels);
+    await CreateLine()
+    // 工作面
+    await workPlane()
+    // 创建地层
+    CreateGroup()
 
-    CreateLine(Tunnels)
-
+}
+// 工作面
+async function workPlane() {
+    // 创建一个 Map 来按材质存储几何体
+    const materialGeometriesMap = new Map();
     // 22910工作面
     const dxf_22910 = await FetchOutLine();
     dxf_22910.forEach(lineSegment => {
@@ -106,16 +71,9 @@ async function init() {
     materialGeometriesMap.forEach((geometries) => {
         // 合并几何体
         const mergedGeometry = BufferGeometryUtils.mergeGeometries(geometries, true);
-        //几何体中所有点信息
         const mergedPoints = mergedGeometry.attributes.position.array;
 
-        let verticeTop = []
-
-        /**  
-         * 数据处理,格式化
-         * 取外围点
-        */
-        let Outvertices = []
+        let verticeTop = [], Outvertices = []
         for (let i = 0; i < mergedPoints.length; i += 3) {
             const vertex = {
                 X: mergedPoints[i],
@@ -163,56 +121,48 @@ async function init() {
             -0.2793846130371094, -0.11246153712272644, 32,
             -0.27876922488212585, -0.1138461530208587, 35
         ]
+
         geometryTop = new THREE.ShapeGeometry(shape);
         geometryTop.setAttribute('position', new THREE.Float32BufferAttribute(arry, 3));
-
-        const materialTest = new THREE.MeshBasicMaterial({ color: 0xff0000, transparent: true, side: THREE.DoubleSide, opacity: 0.5 });
-        const MeshTop = new THREE.Mesh(geometryTop, materialTest);
-        // 应用平移、缩放和旋转变换
-        MeshTop.position.set(1600, 10, 120);
-        MeshTop.scale.set(8000, 4000, 1);
-        MeshTop.rotateX(Math.PI / 2);
+        const material = new THREE.MeshBasicMaterial({ color: 0xff0000, transparent: true, side: THREE.DoubleSide, opacity: 0.5 });
+        const MeshTop = new THREE.Mesh(geometryTop, material);
+        applySet(MeshTop, 10)
 
         geometryBottom = geometryTop.clone();
-        const MeshBottom = new THREE.Mesh(geometryBottom, materialTest);
-        // 应用平移、缩放和旋转变换
-        MeshBottom.position.set(1600, -10, 120);
-        MeshBottom.scale.set(8000, 4000, 1);
-        MeshBottom.rotateX(Math.PI / 2);
-        // console.log('底部', geometryTop);
+        const MeshBottom = new THREE.Mesh(geometryBottom, material);
+        applySet(MeshBottom, -10)
 
         scene.add(MeshTop, MeshBottom);
+
         createSides(geometryTop, geometryBottom);
 
     });
-    // 显示顶点
-    displayPoints(geometryTop, [1300, 10, 120], 0xff0000);
-    displayPoints(geometryBottom, [1300, -10, 120], 0xff0000);
-    CreateGroup()
-    render();
+
 }
 
+function applySet(Mesh, H) {
+    // 应用平移、缩放和旋转变换
+    Mesh.position.set(1600, H, 120);
+    Mesh.scale.set(8000, 4000, 1);
+    Mesh.rotateX(Math.PI / 2);
+}
+
+//创建各个地层
 function CreateGroup() {
     const data = generateHeight(1600, 800);
-    // 创建1600x800的平面几何体
+
+    // 地表
     const geometry = new THREE.PlaneGeometry(1600, 800, 1600 - 1, 800 - 1);
     geometry.rotateX(-Math.PI / 2);  // 旋转使平面平行于地面
     const vertices = geometry.attributes.position.array;
-
     for (let i = 0, j = 0, l = vertices.length; i < l; i++, j += 3) {
         vertices[j + 1] = data[i] * 0.2;
     }
     const color = new THREE.Color(180 / 255, 134 / 255, 80 / 255); // 将 RGB 值转换为 0 到 1 之间的范围
-    // 创建材质
     const material = new THREE.MeshBasicMaterial({ color: color, side: THREE.DoubleSide, transparent: true, opacity: 0.5 });
-    // 创建网格
-    const plane = new THREE.Mesh(geometry, material);
-    // 设置平面的位置和旋转
+    plane = new THREE.Mesh(geometry, material);
     plane.position.set(0, 399, 0);  // 设置平面的位置
-    // 将平面添加到场景
     scene.add(plane);
-
-    // 创建一个立方体几何体和材质
 
     const vertices11 = [
         // 第一个面
@@ -269,10 +219,9 @@ function CreateGroup() {
         // -800, -60, 400,  // 顶点8
         -800, -60, -400  // 顶点7
     ];
-    const geometryCube = new THREE.BoxGeometry();  // 创建空几何体
-    const verticesArray = new Float32Array(vertices11);  // 创建顶点数组
+    const geometryCube = new THREE.BoxGeometry();
+    const verticesArray = new Float32Array(vertices11);
 
-    // 设置顶点数据
     geometryCube.setAttribute('position', new THREE.BufferAttribute(verticesArray, 3));
     const materialCube = new THREE.MeshBasicMaterial({
         color: new THREE.Color(116 / 255, 190 / 255, 194 / 255),
@@ -281,7 +230,7 @@ function CreateGroup() {
         opacity: 0.8,
         wireframe: false
     });
-    const cube = new THREE.Mesh(geometryCube, materialCube);
+    cube = new THREE.Mesh(geometryCube, materialCube);
     cube.position.set(0, 200, 0)
     scene.add(cube);
 
@@ -294,7 +243,7 @@ function CreateGroup() {
         opacity: 0.2,
         wireframe: false
     });
-    const cube2 = new THREE.Mesh(geometryCube2, materialCube2);
+    cube2 = new THREE.Mesh(geometryCube2, materialCube2);
     cube2.position.set(0, 40, 0)
     scene.add(cube2);
 
@@ -307,10 +256,56 @@ function CreateGroup() {
         opacity: 0.2,
         wireframe: false
     });
-    const cube3 = new THREE.Mesh(geometryCube3, materialCube3);
+    cube3 = new THREE.Mesh(geometryCube3, materialCube3);
     cube3.position.set(0, -235, 0)
     scene.add(cube3);
 
+}
+
+// 展开
+function expand() {
+    new TWEEN.Tween(plane.position, tweenGroup)
+        .to({ y: 650 }, 1000)
+        .easing(TWEEN.Easing.Quadratic.Out)
+        .start();
+
+    new TWEEN.Tween(cube.position, tweenGroup)
+        .to({ y: 100 }, 1000)
+        .easing(TWEEN.Easing.Quadratic.Out)
+        .start();
+
+    new TWEEN.Tween(cube2.position, tweenGroup)
+        .to({ y: -500 }, 1000)
+        .easing(TWEEN.Easing.Quadratic.Out)
+        .start();
+
+    new TWEEN.Tween(cube3.position, tweenGroup)
+        .to({ y: -1000 }, 1000)
+        .easing(TWEEN.Easing.Quadratic.Out)
+        .start();
+}
+
+//闭合
+function collapse() {
+    new TWEEN.Tween(plane.position, tweenGroup)
+        .to({ y: 399 }, 2000)
+        .easing(TWEEN.Easing.Quadratic.Out)
+        .start();
+
+    new TWEEN.Tween(cube.position, tweenGroup)
+        .to({ y: 200 }, 2000)
+        .easing(TWEEN.Easing.Quadratic.Out)
+        .start();
+
+    new TWEEN.Tween(cube2.position, tweenGroup)
+        .to({ y: 40 }, 2000)
+        .easing(TWEEN.Easing.Quadratic.Out)
+        .start();
+
+    new TWEEN.Tween(cube3.position, tweenGroup)
+        .to({ y: -235 }, 2000)
+        .easing(TWEEN.Easing.Quadratic.Out)
+        .start();
 }
 
 function generateHeight(width, height) {
@@ -337,14 +332,15 @@ function generateHeight(width, height) {
 
 }
 
-function CreateLine(GeometryLine) {
+async function CreateLine() {
+    const GeometryLine = await DrawTunnel()
+
     GeometryLine.forEach(lineSegment => {
 
         if (lineSegment) {
             const posArray = lineSegment.geometry.attributes.position.array;
             const lineGeometry = new LineGeometry();
             lineGeometry.setPositions(posArray);
-            // displayPoints(lineGeometry, [1300, 200, 120], 0xffff00);
             const lineMaterial = new LineMaterial({
                 color: 0x5f5f5f,
                 linewidth: 3,
@@ -403,124 +399,14 @@ function createSides(geometryTop, geometryBottom) {
     scene.add(sideMesh);
 }
 
-function displayPoints(Geometrys, positionOffset, color) {
-    const positions = Geometrys.attributes.position.array;
-
-    for (let i = 0; i < positions.length; i += 3) {
-        const vertex = {
-            x: positions[i],
-            y: positions[i + 1],
-            z: positions[i + 2]
-        };
-        vertices.value.push(vertex);
-        const geometry = new THREE.BufferGeometry();
-        geometry.setAttribute('position', new THREE.Float32BufferAttribute([vertex.x, vertex.y, vertex.z], 3));
-
-        const material = new THREE.PointsMaterial({ color: color, size: 1 });
-
-        const object = new THREE.Points(geometry, material);
-
-        // 应用平移、缩放和旋转变换
-        object.position.set(...positionOffset);
-        object.scale.set(8000, 4000, 1);
-        object.rotateX(Math.PI / 2);
-        scene.add(object);
-        HelperObjects.push(object);
-    }
+function animate() {
+    requestAnimationFrame(animate);
+    tweenGroup.update();
+    render();
 }
 
 function render() {
     renderer.render(scene, camera);
-}
-
-// 更新并显示当前选中对象的坐标
-function updateCoords() {
-    const object = transformControl.object;
-
-    if (object) {
-        const objectPos = object.geometry.attributes.position.array
-        // console.log(objectPos);
-
-        const originalX = denormalize(objectPos[0], 39476000, 39489000)
-        const originalZ = denormalize(objectPos[1], 3849500, 3856000)
-        const coordsDiv = document.getElementById('coords');
-        coordsDiv.innerHTML = `经度: ${originalX.toFixed(3)}, 纬度: ${originalZ.toFixed(3)}, 高度:<input type="number" id="y-input" step="1" value=${objectPos[2].toFixed(3)}> `;
-
-        const Input = document.getElementById('y-input');
-        Input.addEventListener('change', function () {
-            objectPos[2] = parseFloat(Input.value); // 更新当前对象的 Y 位置
-            object.geometry.attributes.position.needsUpdate = true;
-
-            // 更新 几何体 中的对应位置
-            const index = HelperObjects.indexOf(object);
-            console.log('目标索引：', index);
-
-            if (index <= 18) {
-                let mergedPositions = geometryTop.attributes.position.array;
-                mergedPositions[index * 3] = objectPos[0];
-                mergedPositions[index * 3 + 1] = objectPos[1];
-                mergedPositions[index * 3 + 2] = objectPos[2];
-                geometryTop.attributes.position.needsUpdate = true; //更新几何体位置
-
-            } else {
-                const num = index % 18
-                let BottomPositions = geometryBottom.attributes.position.array;
-                BottomPositions[num * 3] = objectPos[0];
-                BottomPositions[num * 3 + 1] = objectPos[1];
-                BottomPositions[num * 3 + 2] = objectPos[2];
-                geometryBottom.attributes.position.needsUpdate = true; //更新几何体位置
-
-            }
-            // console.log(sideGeometry.attributes.position);
-
-            // sideGeometry.attributes.position.needsUpdate = true;
-
-            // render(); // 重新渲染场景
-
-        });
-    }
-}
-
-function onPointerDown(event) {
-    onDownPosition.x = event.clientX;
-    onDownPosition.y = event.clientY;
-}
-
-function onPointerUp(event) {
-    onUpPosition.x = event.clientX;
-    onUpPosition.y = event.clientY;
-
-    if (onDownPosition.distanceTo(onUpPosition) === 0) {
-        transformControl.detach();
-        render();
-    }
-}
-
-function onPointerMove(event) {
-    pointer.x = (event.clientX / window.innerWidth) * 2 - 1;
-    pointer.y = -(event.clientY / window.innerHeight) * 2 + 1;
-
-    raycaster.setFromCamera(pointer, camera);
-
-    const intersects = raycaster.intersectObjects(HelperObjects, false);
-
-    if (intersects.length > 0) {
-        const object = intersects[0].object;
-        // 更新选中的对象
-        selectedIndex.value = HelperObjects.indexOf(object);
-        if (object !== transformControl.object) {
-            transformControl.attach(object);
-            updateCoords();
-            // 恢复上一个选中的对象的颜色
-            if (selectedObject) {
-                selectedObject.material.color.set(0xff0000); // 恢复为红色
-            }
-            // 将当前对象变为绿色
-            object.material.color.set(0x00ffff);
-            // 更新选中的对象
-            selectedObject = object;
-        }
-    }
 }
 
 function basicInit() {
@@ -551,100 +437,49 @@ function basicInit() {
     });
     scene.add(transformControl);
 
-    transformControl.showX = false;
-    transformControl.showY = false;
-    transformControl.showZ = false;
-    transformControl.addEventListener('objectChange', updateCoords);
-
-    // 创建网格辅助线
-    const helper = new THREE.GridHelper(2000, 50);
-    helper.position.y = 0;
-    helper.material.opacity = 0.25;
-    helper.material.transparent = true;
-    // scene.add(helper);
-
     // 创建一个立方体几何体和材质
     const geometry = new THREE.BoxGeometry(1600, 800, 800);
     const color = new THREE.Color(255 / 255, 255 / 255, 229 / 255); // 将 RGB 值转换为 0 到 1 之间的范围
 
     const material = new THREE.MeshBasicMaterial({ color: color, transparent: true, opacity: 0.4 });
     const cube = new THREE.Mesh(geometry, material);
-    // scene.add(cube);
-
     const box = new THREE.BoxHelper(cube, 0x708090);
     scene.add(box);
-}
-
-function saveGeometry() {
-    const strplace = geometryTop.attributes.position.array;
-    const formattedPositions = [];
-    // const originalX = 
-    // const originalZ = 
-    for (let i = 0; i < strplace.length; i += 3) {
-        // 每三个数据表示一个点的 x, y, z
-        const x = denormalize(strplace[i].toFixed(3), 39476000, 39489000);
-        const z = denormalize(strplace[i + 1].toFixed(3), 3849500, 3856000);
-        const h = strplace[i + 2].toFixed(3);
-
-        // 格式化输出为 "x= , y= , z= "
-        const formattedPosition = `x= ${x}, z= ${z},h= ${h}`;
-        formattedPositions.push(formattedPosition);
-    }
-
-    // 将所有位置格式化为字符串
-    const code = '[' + (formattedPositions.join(',\n\t')) + ']';
-
-    // 输出到控制台
-    console.log(formattedPositions.join(',\n'));
-
-    // 通过 prompt 弹出框显示可复制的代码
-    prompt('保存高度信息', code);
 }
 
 </script>
 
 <style scoped>
-.highlight {
-    background-color: yellow;
-    /* 高亮颜色设置为黄色 */
-}
-
 body {
     background-color: #f0f0f0;
     color: #444;
 }
 
-a {
-    color: #08f;
-}
-
-.coords-display {
+button.expand,
+button.collapse {
     position: absolute;
-    top: 10px;
-    left: 10px;
-    background: rgba(230, 230, 225, 0.86);
-    padding: 5px 10px;
-    border-radius: 4px;
-    font-size: 14px;
-    color: #000;
-    z-index: 1;
-}
-
-.save-button {
-    position: absolute;
-    top: 10px;
-    right: 10px;
-    background: #4caf50;
-    color: #fff;
-    padding: 8px 12px;
+    left: 20px;
+    top: 20px;
+    margin: 10px;
+    padding: 10px 20px;
+    background-color: #4CAF50;
+    /* 绿色背景 */
+    color: white;
+    /* 白色字体 */
     border: none;
     border-radius: 4px;
     cursor: pointer;
-    z-index: 1;
 }
 
-.save-button:hover {
-    background: #45a049;
+button.collapse {
+    top: 60px;
+    /* 间隔 */
+}
+
+button.expand:hover,
+button.collapse:hover {
+    background-color: #45a049;
+    /* 鼠标悬停时的颜色 */
 }
 
 #container {
