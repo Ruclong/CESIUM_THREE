@@ -7,7 +7,7 @@
 </template>
 
 <script setup>
-import {  onMounted } from 'vue';
+import { onMounted } from 'vue';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { TransformControls } from 'three/examples/jsm/controls/TransformControls.js';
@@ -21,12 +21,14 @@ import { Line2 } from 'three/examples/jsm/lines/Line2.js';
 import { ImprovedNoise } from 'three/examples/jsm/math/ImprovedNoise.js';
 import * as TWEEN from '@tweenjs/tween.js';
 
+import { DDSLoader } from 'three/examples/jsm/loaders/DDSLoader.js';
+
 // 创建 TWEEN 组
 const tweenGroup = new TWEEN.Group();
 
 let container;
 let camera, scene, renderer;
-let plane, cube, cube2, cube3;
+let plane, cube0, cube, cube2, cube3;
 
 let transformControl;
 let geometryTop, geometryBottom; // 合并后几何体
@@ -45,8 +47,8 @@ async function init() {
     await workPlane()
     // 创建地层
     CreateGroup()
-
 }
+
 // 工作面
 async function workPlane() {
     // 创建一个 Map 来按材质存储几何体
@@ -149,8 +151,29 @@ function applySet(Mesh, H) {
 
 //创建各个地层
 function CreateGroup() {
-    const data = generateHeight(1600, 800);
+    const loaderDDS = new DDSLoader();  // 创建 DDSLoader 加载器
+    // 加载不同类型的 DDS 纹理
+    const map5 = loaderDDS.load('disturb_argb_nomip.dds');
+    map5.minFilter = map5.magFilter = THREE.LinearFilter;
+    map5.anisotropy = 4;
+    map5.colorSpace = THREE.SRGBColorSpace;
+    const material7 = new THREE.MeshBasicMaterial({ map: map5 });
 
+    // 使用 TextureLoader 加载 JPG 纹理
+    const loader = new THREE.TextureLoader();
+    const texture = loader.load('grasslight-big.jpg'); // 替换为你的 JPG 图片路径
+    const textureLava = loader.load('lavatile.jpg'); // 替换为你的 JPG 图片路径
+    const textureYanshi = loader.load('yanshi.jpg'); // 替换为你的 JPG 图片路径
+
+
+    // 创建基础材质，使用加载的 JPG 纹理
+    const materialTest = new THREE.MeshBasicMaterial({ map: texture });
+    const materialLava = new THREE.MeshBasicMaterial({ map: textureLava });
+    const materialYanshi = new THREE.MeshBasicMaterial({ map: textureYanshi });
+
+
+
+    const data = generateHeight(1600, 800);
     // 地表
     const geometry = new THREE.PlaneGeometry(1600, 800, 1600 - 1, 800 - 1);
     geometry.rotateX(-Math.PI / 2);  // 旋转使平面平行于地面
@@ -158,71 +181,79 @@ function CreateGroup() {
     for (let i = 0, j = 0, l = vertices.length; i < l; i++, j += 3) {
         vertices[j + 1] = data[i] * 0.2;
     }
-    const color = new THREE.Color(180 / 255, 134 / 255, 80 / 255); // 将 RGB 值转换为 0 到 1 之间的范围
-    const material = new THREE.MeshBasicMaterial({ color: color, side: THREE.DoubleSide, transparent: true, opacity: 0.5 });
-    plane = new THREE.Mesh(geometry, material);
+    // const color = new THREE.Color(180 / 255, 134 / 255, 80 / 255); // 将 RGB 值转换为 0 到 1 之间的范围
+    // const material = new THREE.MeshBasicMaterial({ color: color, side: THREE.DoubleSide, transparent: true, opacity: 0.5 });
+    plane = new THREE.Mesh(geometry, materialTest);
     plane.position.set(0, 399, 0);  // 设置平面的位置
     scene.add(plane);
 
-    const vertices11 = [
-        // 第一个面
-        800, 50, 400,  // 顶点1
-        800, 60, -400, // 顶点2
-        800, -60, 400, // 顶点3
+    // 地层0
+    const geometryCube0 = new THREE.BoxGeometry(1600, 60, 800);  // 创建空几何体
 
-        // 800, -60, 400, // 顶点3
-        // 800, 160, -400, // 顶点2
-        800, -60, -400, // 顶点4
+    cube0 = new THREE.Mesh(geometryCube0, materialYanshi);
+    cube0.position.set(0, 380, 0)
+    scene.add(cube0);
 
-        // 第二个面
-        -800, 1, -400, // 顶点5
-        -800, 1, 400,  // 顶点6
-        -800, -60, -400, // 顶点7
+    // 地层1
+    // const vertices11 = [
+    //     // 第一个面
+    //     800, 50, 400,  // 顶点1
+    //     800, 60, -400, // 顶点2
+    //     800, -60, 400, // 顶点3
 
-        // -800, -60, -400, // 顶点7
-        // -800, 10, 400,  // 顶点6
-        -800, -60, 400,  // 顶点8
+    //     // 800, -60, 400, // 顶点3
+    //     // 800, 160, -400, // 顶点2
+    //     800, -60, -400, // 顶点4
 
-        // 前面（+Z方向）
-        800, 50, 400,    // 顶点1
-        -800, 1, 400,   // 顶点6
-        800, -60, 400,   // 顶点3
+    //     // 第二个面
+    //     -800, 1, -400, // 顶点5
+    //     -800, 1, 400,  // 顶点6
+    //     -800, -60, -400, // 顶点7
 
-        // 800, -60, 400,   // 顶点3
-        // -800, 10, 400,   // 顶点6
-        -800, -60, 400,  // 顶点8
+    //     // -800, -60, -400, // 顶点7
+    //     // -800, 10, 400,  // 顶点6
+    //     -800, -60, 400,  // 顶点8
 
-        // 背面（-Z方向）
-        800, 60, -400,   // 顶点2
-        -800, 1, -400,  // 顶点5
-        800, -60, -400,  // 顶点4
+    //     // 前面（+Z方向）
+    //     800, 50, 400,    // 顶点1
+    //     -800, 1, 400,   // 顶点6
+    //     800, -60, 400,   // 顶点3
 
-        // 800, -60, -400,  // 顶点4
-        // -800, 10, -400,  // 顶点5
-        -800, -60, -400, // 顶点7
+    //     // 800, -60, 400,   // 顶点3
+    //     // -800, 10, 400,   // 顶点6
+    //     -800, -60, 400,  // 顶点8
 
-        // 顶面
-        800, 50, 400,    // 顶点1
-        -800, 1, 400,   // 顶点6
-        800, 60, -400,   // 顶点2
+    //     // 背面（-Z方向）
+    //     800, 60, -400,   // 顶点2
+    //     -800, 1, -400,  // 顶点5
+    //     800, -60, -400,  // 顶点4
 
-        // 800, 160, -400,   // 顶点2
-        // -800, 10, 400,   // 顶点6
-        -800, 1, -400,  // 顶点5
+    //     // 800, -60, -400,  // 顶点4
+    //     // -800, 10, -400,  // 顶点5
+    //     -800, -60, -400, // 顶点7
 
-        // 底面
-        800, -60, 400,   // 顶点3
-        -800, -60, 400,  // 顶点8
-        800, -60, -400,  // 顶点4
+    //     // 顶面
+    //     800, 50, 400,    // 顶点1
+    //     -800, 1, 400,   // 顶点6
+    //     800, 60, -400,   // 顶点2
 
-        // 800, -60, -400,  // 顶点4
-        // -800, -60, 400,  // 顶点8
-        -800, -60, -400  // 顶点7
-    ];
-    const geometryCube = new THREE.BoxGeometry();
-    const verticesArray = new Float32Array(vertices11);
+    //     // 800, 160, -400,   // 顶点2
+    //     // -800, 10, 400,   // 顶点6
+    //     -800, 1, -400,  // 顶点5
 
-    geometryCube.setAttribute('position', new THREE.BufferAttribute(verticesArray, 3));
+    //     // 底面
+    //     800, -60, 400,   // 顶点3
+    //     -800, -60, 400,  // 顶点8
+    //     800, -60, -400,  // 顶点4
+
+    //     // 800, -60, -400,  // 顶点4
+    //     // -800, -60, 400,  // 顶点8
+    //     -800, -60, -400  // 顶点7
+    // ];
+    const geometryCube = new THREE.BoxGeometry(1600, 200, 800);
+    // const verticesArray = new Float32Array(vertices11);
+
+    // geometryCube.setAttribute('position', new THREE.BufferAttribute(verticesArray, 3));
     const materialCube = new THREE.MeshBasicMaterial({
         color: new THREE.Color(116 / 255, 190 / 255, 194 / 255),
         transparent: true,
@@ -231,56 +262,61 @@ function CreateGroup() {
         wireframe: false
     });
     cube = new THREE.Mesh(geometryCube, materialCube);
-    cube.position.set(0, 200, 0)
+    cube.position.set(0, 245, 0)
     scene.add(cube);
 
+    // 地层2
     const geometryCube2 = new THREE.BoxGeometry(1600, 200, 800);  // 创建空几何体
     // 设置顶点数据
-    const materialCube2 = new THREE.MeshBasicMaterial({
-        color: new THREE.Color(163 / 255, 128 / 255, 90 / 255),
-        transparent: true,
-        side: THREE.DoubleSide,
-        opacity: 0.2,
-        wireframe: false
-    });
-    cube2 = new THREE.Mesh(geometryCube2, materialCube2);
+    // const materialCube2 = new THREE.MeshBasicMaterial({
+    //     color: new THREE.Color(163 / 255, 128 / 255, 90 / 255),
+    //     transparent: true,
+    //     side: THREE.DoubleSide,
+    //     opacity: 0.2,
+    //     wireframe: false
+    // });
+    cube2 = new THREE.Mesh(geometryCube2, material7);
     cube2.position.set(0, 40, 0)
     scene.add(cube2);
 
+    // 地层3
     const geometryCube3 = new THREE.BoxGeometry(1600, 340, 800);  // 创建空几何体
-    // 设置顶点数据
-    const materialCube3 = new THREE.MeshBasicMaterial({
-        color: new THREE.Color(163 / 255, 0 / 255, 90 / 255),
-        transparent: true,
-        side: THREE.DoubleSide,
-        opacity: 0.2,
-        wireframe: false
-    });
-    cube3 = new THREE.Mesh(geometryCube3, materialCube3);
+    // const materialCube3 = new THREE.MeshBasicMaterial({
+    //     color: new THREE.Color(163 / 255, 0 / 255, 90 / 255),
+    //     transparent: true,
+    //     side: THREE.DoubleSide,
+    //     opacity: 0.2,
+    //     wireframe: false
+    // });
+    cube3 = new THREE.Mesh(geometryCube3, materialLava);
     cube3.position.set(0, -235, 0)
     scene.add(cube3);
-
 }
 
 // 展开
 function expand() {
     new TWEEN.Tween(plane.position, tweenGroup)
-        .to({ y: 650 }, 1000)
+        .to({ y: 600 }, 1000)
+        .easing(TWEEN.Easing.Quadratic.Out)
+        .start();
+
+    new TWEEN.Tween(cube0.position, tweenGroup)
+        .to({ y: 600 }, 1000)
         .easing(TWEEN.Easing.Quadratic.Out)
         .start();
 
     new TWEEN.Tween(cube.position, tweenGroup)
-        .to({ y: 100 }, 1000)
+        .to({ y: 250 }, 1000)
         .easing(TWEEN.Easing.Quadratic.Out)
         .start();
 
     new TWEEN.Tween(cube2.position, tweenGroup)
-        .to({ y: -500 }, 1000)
+        .to({ y: -180 }, 1000)
         .easing(TWEEN.Easing.Quadratic.Out)
         .start();
 
     new TWEEN.Tween(cube3.position, tweenGroup)
-        .to({ y: -1000 }, 1000)
+        .to({ y: -600 }, 1000)
         .easing(TWEEN.Easing.Quadratic.Out)
         .start();
 }
@@ -288,22 +324,27 @@ function expand() {
 //闭合
 function collapse() {
     new TWEEN.Tween(plane.position, tweenGroup)
-        .to({ y: 399 }, 2000)
+        .to({ y: 399 }, 1000)
+        .easing(TWEEN.Easing.Quadratic.Out)
+        .start();
+
+    new TWEEN.Tween(cube0.position, tweenGroup)
+        .to({ y: 380 }, 1000)
         .easing(TWEEN.Easing.Quadratic.Out)
         .start();
 
     new TWEEN.Tween(cube.position, tweenGroup)
-        .to({ y: 200 }, 2000)
+        .to({ y: 245 }, 1000)
         .easing(TWEEN.Easing.Quadratic.Out)
         .start();
 
     new TWEEN.Tween(cube2.position, tweenGroup)
-        .to({ y: 40 }, 2000)
+        .to({ y: 40 }, 1000)
         .easing(TWEEN.Easing.Quadratic.Out)
         .start();
 
     new TWEEN.Tween(cube3.position, tweenGroup)
-        .to({ y: -235 }, 2000)
+        .to({ y: -235 }, 1000)
         .easing(TWEEN.Easing.Quadratic.Out)
         .start();
 }
@@ -343,7 +384,8 @@ async function CreateLine() {
             lineGeometry.setPositions(posArray);
             const lineMaterial = new LineMaterial({
                 color: 0x5f5f5f,
-                linewidth: 3,
+                linewidth: 5,
+
             });
 
             const mergedLineSegments = new Line2(lineGeometry, lineMaterial);
@@ -446,6 +488,7 @@ function basicInit() {
     const box = new THREE.BoxHelper(cube, 0x708090);
     scene.add(box);
 }
+
 
 </script>
 
