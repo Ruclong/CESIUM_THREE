@@ -1,13 +1,15 @@
 <template>
     <div>
         <div id="container"></div>
+        <input type="range" id="timeRange" min="0" max="100" value="100">
+        <div id="timeDisplay">当前时间: </div>
         <button class="expand" @click="expand">展开</button>
         <button class="collapse" @click="collapse">闭合</button>
     </div>
 </template>
 
 <script setup>
-import { onMounted } from 'vue';
+import { ref, onMounted, computed } from 'vue';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { TransformControls } from 'three/examples/jsm/controls/TransformControls.js';
@@ -22,9 +24,14 @@ import { ImprovedNoise } from 'three/examples/jsm/math/ImprovedNoise.js';
 import * as TWEEN from '@tweenjs/tween.js';
 
 import { DDSLoader } from 'three/examples/jsm/loaders/DDSLoader.js';
+import { getQuakeResult } from '@/api/quakeResult.js';
 
 // 创建 TWEEN 组
 const tweenGroup = new TWEEN.Group();
+
+let quakeDots = [];
+let quakeTimes = [];
+let currentQuakeIndex = 0;
 
 let container;
 let camera, scene, renderer;
@@ -47,6 +54,37 @@ async function init() {
     await workPlane()
     // 创建地层
     CreateGroup()
+    //加载微震点
+    await fetchQuakeResult()
+    // 监听时间滚动条变化
+    const timeRange = document.getElementById('timeRange');
+
+    timeRange.addEventListener('input', function () {
+        const value = parseFloat(timeRange.value);
+        const timeDisplay = document.getElementById('timeDisplay'); // 显示时间的文本元素
+        const startTime = new Date(quakeTimes[0]);
+        const endTime = new Date(quakeTimes[quakeTimes.length - 1]);
+        const totalTime = endTime - startTime; // 计算总时间差
+
+        // 根据滚动条值来调整地震点显示情况
+        const currentTime = new Date(startTime.getTime() + (totalTime * value / 100));
+        // 使用toLocaleString()将时间转为本地格式
+        const formattedTime = currentTime.toLocaleString('zh-CN', {
+            hour12: false, // 24小时制
+            timeZone: 'Asia/Shanghai' // 指定时区
+        });
+
+        // 更新时间显示
+        timeDisplay.innerText = `当前时间: ${formattedTime}`;
+
+        quakeDots.forEach((dot, index) => {
+            if (new Date(quakeTimes[index]) < currentTime) {
+                dot.material.opacity = 1;  // 显示
+            } else {
+                dot.material.opacity = 0;  // 隐藏
+            }
+        });
+    });
 }
 
 // 工作面
@@ -126,7 +164,7 @@ async function workPlane() {
 
         geometryTop = new THREE.ShapeGeometry(shape);
         geometryTop.setAttribute('position', new THREE.Float32BufferAttribute(arry, 3));
-        const material = new THREE.MeshBasicMaterial({ color: 0xff0000, transparent: true, side: THREE.DoubleSide, opacity: 0.5 });
+        const material = new THREE.MeshBasicMaterial({ color: 0x0, transparent: true, side: THREE.DoubleSide, opacity: 0.5 });
         const MeshTop = new THREE.Mesh(geometryTop, material);
         applySet(MeshTop, 10)
 
@@ -153,7 +191,7 @@ function applySet(Mesh, H) {
 function CreateGroup() {
     const loaderDDS = new DDSLoader();  // 创建 DDSLoader 加载器
     // 加载不同类型的 DDS 纹理
-    const map5 = loaderDDS.load('disturb_argb_nomip.dds');
+    const map5 = loaderDDS.load('texture/disturb_argb_nomip.dds');
     map5.minFilter = map5.magFilter = THREE.LinearFilter;
     map5.anisotropy = 4;
     map5.colorSpace = THREE.SRGBColorSpace;
@@ -161,9 +199,9 @@ function CreateGroup() {
 
     // 使用 TextureLoader 加载 JPG 纹理
     const loader = new THREE.TextureLoader();
-    const texture = loader.load('grasslight-big.jpg'); // 替换为你的 JPG 图片路径
-    const textureLava = loader.load('lavatile.jpg'); // 替换为你的 JPG 图片路径
-    const textureYanshi = loader.load('yanshi.jpg'); // 替换为你的 JPG 图片路径
+    const texture = loader.load('texture/grasslight-big.jpg'); // 替换为你的 JPG 图片路径
+    const textureLava = loader.load('texture/lavatile.jpg'); // 替换为你的 JPG 图片路径
+    const textureYanshi = loader.load('texture/yanshi.jpg'); // 替换为你的 JPG 图片路径
 
 
     // 创建基础材质，使用加载的 JPG 纹理
@@ -293,6 +331,102 @@ function CreateGroup() {
     scene.add(cube3);
 }
 
+async function fetchQuakeResult() {
+    const quakeData = await getQuakeResult(); // 调用封装的 API 获取数据
+    const data = quakeData.data;
+
+    const processedData = data.map(item => ({
+        X: item[0],
+        Y: item[1],
+        Z: item[2],
+        energy: item[3],
+        quaketime: item[4],
+        quakelevel: item[5]
+    })).slice(1);
+
+    // console.log(processedData);
+    // 获取X和Y的最大值最小值
+    const X_values = processedData.map(quake => quake.X);
+    const Y_values = processedData.map(quake => quake.Y);
+
+    const minX = Math.min(...X_values);
+    const maxX = Math.max(...X_values);
+    const minY = Math.min(...Y_values);
+    const maxY = Math.max(...Y_values);
+
+    processedData.forEach(quake => {
+        // 归一化X和Y
+        const position_X = 2 * ((quake.X - minX) / (maxX - minX)) - 1;
+        const position_Y = 2 * ((quake.Y - minY) / (maxY - minY)) - 1;
+        const energy = quake.energy;
+        const quakelevel = quake.quakelevel;
+
+        let { color, size } = getColorAndSize(energy, quakelevel);
+
+        // 添加离散点
+        const dotGeometry = new THREE.SphereGeometry(size, 12, 12);
+        const dotMaterial = new THREE.MeshBasicMaterial({
+            color: color,
+            transparent: true,
+            opacity: 0
+        });
+        const dot = new THREE.Mesh(dotGeometry, dotMaterial);
+        dot.position.set(position_X * 800, quake.Z * 0.6 + 390, position_Y * 300);
+
+        scene.add(dot);
+        quakeDots.push(dot);
+        quakeTimes.push(quake.quaketime);
+
+    })
+    // console.log(quakeTimes);
+    // 启动展示动画
+    showQuakesWithTween();
+}
+
+function showQuakesWithTween() {
+    if (currentQuakeIndex >= quakeDots.length) {
+        return;  // 如果所有点都展示完毕
+    }
+
+    const dot = quakeDots[currentQuakeIndex];
+
+    new TWEEN.Tween(dot.material, tweenGroup)
+        .to({ opacity: 1 }, 10)  // 1 秒内让点的透明度变为 1（完全可见）
+        .onComplete(() => {
+            currentQuakeIndex++;
+            showQuakesWithTween();  // 展示下一个点
+        })
+        .start();
+}
+
+// 调整颜色和大小的函数
+function getColorAndSize(energy, quakelevel) {
+    let color, size;
+
+    // 根据 quakelevel 设置颜色
+    if (quakelevel > 0 && quakelevel <= 1) {
+        color = 0x91CC75; // 绿色
+    } else if (quakelevel > 1 && quakelevel <= 2) {
+        color = 0xFAC858; // 黄色
+    } else if (quakelevel > 2 && quakelevel < 3) {
+        color = 0xEE6666; // 红色
+    } else {
+        color = 0xcc0033; // 深红色
+    }
+
+    // 根据 energy 设置大小
+    if (energy > 0 && energy <= 1000) {
+        size = 7;
+    } else if (energy > 1000 && energy <= 10000) {
+        size = 10;
+    } else if (energy > 10000 && energy < 100000) {
+        size = 15;
+    } else {
+        size = 20;
+    }
+    return { color, size };
+}
+
 // 展开
 function expand() {
     new TWEEN.Tween(plane.position, tweenGroup)
@@ -374,7 +508,13 @@ function generateHeight(width, height) {
 }
 
 async function CreateLine() {
-    const GeometryLine = await DrawTunnel()
+    const GeometryLine = await DrawTunnel();
+
+    // 使用 TextureLoader 加载 JPG 纹理
+    const loader = new THREE.TextureLoader();
+    const texture = loader.load('texture/green1.png'); // 替换为你的 JPG 图片路径
+    // 创建基础材质，使用加载的 JPG 纹理
+    const materialTest = new THREE.MeshBasicMaterial({ map: texture });
 
     GeometryLine.forEach(lineSegment => {
 
@@ -382,12 +522,16 @@ async function CreateLine() {
             const posArray = lineSegment.geometry.attributes.position.array;
             const lineGeometry = new LineGeometry();
             lineGeometry.setPositions(posArray);
+            // 创建金属绿色的材质
             const lineMaterial = new LineMaterial({
-                color: 0x5f5f5f,
-                linewidth: 5,
-
+                color: 0x3b6a51, // 深绿色接近黑色
+                linewidth: 10,
+                transparent: true, // 如果需要透明度
+                opacity: 1, // 不透明度
+                // 其他金属质感的属性（假设支持）
+                metalness: 1.0, // 金属度
+                roughness: 0.1, // 粗糙度，调整以获得所需的质感
             });
-
             const mergedLineSegments = new Line2(lineGeometry, lineMaterial);
 
             mergedLineSegments.position.set(-500, 1300, -400);
@@ -431,7 +575,7 @@ function createSides(geometryTop, geometryBottom) {
     sideGeometry.setAttribute('position', new THREE.Float32BufferAttribute(sideVertices, 3));
 
     // 使用双面材质以确保正确渲染
-    const sideMaterial = new THREE.MeshBasicMaterial({ color: 0xff0000, transparent: true, side: THREE.DoubleSide, opacity: 0.5 });
+    const sideMaterial = new THREE.MeshBasicMaterial({ color: 0x0, transparent: true, side: THREE.DoubleSide, opacity: 0.5 });
     const sideMesh = new THREE.Mesh(sideGeometry, sideMaterial);
 
     sideMesh.position.set(1600, 0, 120);
@@ -523,6 +667,20 @@ button.expand:hover,
 button.collapse:hover {
     background-color: #45a049;
     /* 鼠标悬停时的颜色 */
+}
+
+#timeRange {
+    position: absolute;
+    top: 25px;
+    left: 10%;
+    width: 80%;
+}
+
+#timeDisplay {
+    position: absolute;
+    top: 5px;
+    left: 10%;
+    width: 80%;
 }
 
 #container {
