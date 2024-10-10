@@ -9,22 +9,15 @@
 </template>
 
 <script setup>
-import { ref, onMounted, computed } from 'vue';
+import { onMounted } from 'vue';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
-import { TransformControls } from 'three/examples/jsm/controls/TransformControls.js';
-import { FetchOutLine } from '../three/three_cad';
-import { DrawTunnel } from '../three/edit';
-import * as BufferGeometryUtils from 'three/examples/jsm/utils/BufferGeometryUtils.js';
-import { grahamScan, TIN } from '../three/Utils'
-import { LineMaterial } from 'three/examples/jsm/lines/LineMaterial.js';
-import { LineGeometry } from 'three/examples/jsm/lines/LineGeometry.js';
-import { Line2 } from 'three/examples/jsm/lines/Line2.js';
-import { ImprovedNoise } from 'three/examples/jsm/math/ImprovedNoise.js';
 import * as TWEEN from '@tweenjs/tween.js';
 
 import { DDSLoader } from 'three/examples/jsm/loaders/DDSLoader.js';
 import { getQuakeResult } from '@/api/quakeResult.js';
+
+import { workPlane, CreateTunnel, generateHeight, getColorAndSize } from './js/editPlane.js'
 
 // 创建 TWEEN 组
 const tweenGroup = new TWEEN.Group();
@@ -37,8 +30,7 @@ let container;
 let camera, scene, renderer;
 let plane, cube0, cube, cube2, cube3;
 
-let transformControl;
-let geometryTop, geometryBottom; // 合并后几何体
+let depthTestEnabled = true; // 初始化深度检测状态为开启
 
 onMounted(() => {
     init();
@@ -49,16 +41,16 @@ async function init() {
     //基础场景设置
     basicInit();
     // 巷道
-    await CreateLine()
+    await CreateTunnel(scene)
     // 工作面
-    await workPlane()
+    await workPlane(scene)
     // 创建地层
     CreateGroup()
-    //加载微震点
+    // 加载微震点
     await fetchQuakeResult()
+
     // 监听时间滚动条变化
     const timeRange = document.getElementById('timeRange');
-
     timeRange.addEventListener('input', function () {
         const value = parseFloat(timeRange.value);
         const timeDisplay = document.getElementById('timeDisplay'); // 显示时间的文本元素
@@ -87,105 +79,6 @@ async function init() {
     });
 }
 
-// 工作面
-async function workPlane() {
-    // 创建一个 Map 来按材质存储几何体
-    const materialGeometriesMap = new Map();
-    // 22910工作面
-    const dxf_22910 = await FetchOutLine();
-    dxf_22910.forEach(lineSegment => {
-        // 更新几何体的世界矩阵
-        lineSegment.updateMatrix();
-        // 获取当前几何体
-        const geometry = lineSegment.geometry.clone().applyMatrix4(lineSegment.matrix);
-        // 获取当前材质
-        const material = lineSegment.material;
-        // 如果该材质已有存储的几何体，添加到数组，否则创建一个新的数组
-        if (!materialGeometriesMap.has(material)) {
-            materialGeometriesMap.set(material, []);
-        }
-        materialGeometriesMap.get(material).push(geometry);
-    });
-
-    // 遍历材质-几何体对，合并几何体
-    materialGeometriesMap.forEach((geometries) => {
-        // 合并几何体
-        const mergedGeometry = BufferGeometryUtils.mergeGeometries(geometries, true);
-        const mergedPoints = mergedGeometry.attributes.position.array;
-
-        let verticeTop = [], Outvertices = []
-        for (let i = 0; i < mergedPoints.length; i += 3) {
-            const vertex = {
-                X: mergedPoints[i],
-                Y: mergedPoints[i + 1],
-                altitude: mergedPoints[i + 2],
-                bottom: 0
-            };
-            Outvertices.push(vertex);
-        }
-        const data = Outvertices.map(row => [row['X'], row['Y'], row['altitude'], row['bottom']]);
-        const points = data.map(row => [row[0], row[1]]);
-        const hull = grahamScan(points);
-        for (let i = 0; i < hull.length; i++) {
-            verticeTop.push(...hull[i], 0)
-        }
-
-        /**
-         *根据外围点信息，连接生成面
-          生成形状对象
-        */
-        const shape = new THREE.Shape();
-        shape.moveTo(verticeTop[0], verticeTop[1]);
-        for (let i = 3; i < verticeTop.length; i += 3) {
-            shape.lineTo(verticeTop[i], verticeTop[i + 1]);
-        }
-        // 确保闭合路径
-        shape.lineTo(verticeTop[0], verticeTop[1]);
-        const arry = [
-            -0.27815383672714233, -0.11492307484149933, 40,
-            -0.2769230902194977, -0.1143076941370964, 36,
-            -0.16861538589000702, -0.048692308366298676, 49,
-            -0.11630769073963165, -0.016307692974805832, 50,
-            -0.11569231003522873, -0.01592307724058628, 50,
-            -0.1120000034570694, -0.013461538590490818, 55,
-            -0.11076922714710236, -0.011384615674614906, 65,
-            -0.1156923100352287, -0.0037692307960242033, 25,
-            -0.12123076617717743, 0.00469230767339468, -5,
-            -0.1316923052072525, 0.020384615287184715, -53,
-            -0.1341538429260254, 0.022923076525330544, -77,
-            -0.14523077011108398, 0.02515384554862976, -58,
-            -0.14646153151988983, 0.02500000037252903, -60,
-            -0.27261537313461304, -0.05000000074505806, -58,
-            -0.29046154022216797, -0.06530769169330597, -37,
-            -0.29046154022216797, -0.06715384870767593, -29,
-            -0.2793846130371094, -0.11246153712272644, 32,
-            -0.27876922488212585, -0.1138461530208587, 35
-        ]
-
-        geometryTop = new THREE.ShapeGeometry(shape);
-        geometryTop.setAttribute('position', new THREE.Float32BufferAttribute(arry, 3));
-        const material = new THREE.MeshBasicMaterial({ color: 0x0, transparent: true, side: THREE.DoubleSide, opacity: 0.5 });
-        const MeshTop = new THREE.Mesh(geometryTop, material);
-        applySet(MeshTop, 10)
-
-        geometryBottom = geometryTop.clone();
-        const MeshBottom = new THREE.Mesh(geometryBottom, material);
-        applySet(MeshBottom, -10)
-
-        scene.add(MeshTop, MeshBottom);
-
-        createSides(geometryTop, geometryBottom);
-
-    });
-
-}
-
-function applySet(Mesh, H) {
-    // 应用平移、缩放和旋转变换
-    Mesh.position.set(1600, H, 120);
-    Mesh.scale.set(8000, 4000, 1);
-    Mesh.rotateX(Math.PI / 2);
-}
 
 //创建各个地层
 function CreateGroup() {
@@ -368,7 +261,8 @@ async function fetchQuakeResult() {
         const dotMaterial = new THREE.MeshBasicMaterial({
             color: color,
             transparent: true,
-            opacity: 0
+            opacity: 0,
+            depthTest: true  // 关闭深度检测 
         });
         const dot = new THREE.Mesh(dotGeometry, dotMaterial);
         dot.position.set(position_X * 800, quake.Z * 0.6 + 390, position_Y * 300);
@@ -389,9 +283,33 @@ function showQuakesWithTween() {
     }
 
     const dot = quakeDots[currentQuakeIndex];
+    const startTime = new Date(quakeTimes[0]);
+    const endTime = new Date(quakeTimes[quakeDots.length - 1]);
+    const totalTime = endTime - startTime;
+
+    // 获取滑动条和时间显示元素
+    const timeRange = document.getElementById('timeRange');
+    const timeDisplay = document.getElementById('timeDisplay');
 
     new TWEEN.Tween(dot.material, tweenGroup)
-        .to({ opacity: 1 }, 10)  // 1 秒内让点的透明度变为 1（完全可见）
+        .to({ opacity: 1 }, 10)  // 0.1 秒内让点的透明度变为 1（完全可见）
+        .onUpdate(() => {
+            // 根据当前微震点的时间更新显示
+            const currentTime = new Date(startTime.getTime() + (totalTime * currentQuakeIndex / quakeDots.length));
+
+            // 使用 toLocaleString() 将时间转为本地格式
+            const formattedTime = currentTime.toLocaleString('zh-CN', {
+                hour12: false, // 24小时制
+                timeZone: 'Asia/Shanghai' // 指定时区
+            });
+
+            // 更新显示时间
+            timeDisplay.innerText = `当前时间: ${formattedTime}`;
+
+            // 计算当前时间在总时间中的百分比，更新进度条
+            const progress = (currentQuakeIndex / quakeDots.length) * 100;
+            timeRange.value = progress;
+        })
         .onComplete(() => {
             currentQuakeIndex++;
             showQuakesWithTween();  // 展示下一个点
@@ -399,36 +317,11 @@ function showQuakesWithTween() {
         .start();
 }
 
-// 调整颜色和大小的函数
-function getColorAndSize(energy, quakelevel) {
-    let color, size;
-
-    // 根据 quakelevel 设置颜色
-    if (quakelevel > 0 && quakelevel <= 1) {
-        color = 0x91CC75; // 绿色
-    } else if (quakelevel > 1 && quakelevel <= 2) {
-        color = 0xFAC858; // 黄色
-    } else if (quakelevel > 2 && quakelevel < 3) {
-        color = 0xEE6666; // 红色
-    } else {
-        color = 0xcc0033; // 深红色
-    }
-
-    // 根据 energy 设置大小
-    if (energy > 0 && energy <= 1000) {
-        size = 7;
-    } else if (energy > 1000 && energy <= 10000) {
-        size = 10;
-    } else if (energy > 10000 && energy < 100000) {
-        size = 15;
-    } else {
-        size = 20;
-    }
-    return { color, size };
-}
-
 // 展开
 function expand() {
+    // 关闭深度检测
+    depthTestEnabled = false;
+    updateDotMaterials();
     new TWEEN.Tween(plane.position, tweenGroup)
         .to({ y: 600 }, 1000)
         .easing(TWEEN.Easing.Quadratic.Out)
@@ -457,6 +350,9 @@ function expand() {
 
 //闭合
 function collapse() {
+    // 打开深度检测
+    depthTestEnabled = true;
+    updateDotMaterials();
     new TWEEN.Tween(plane.position, tweenGroup)
         .to({ y: 399 }, 1000)
         .easing(TWEEN.Easing.Quadratic.Out)
@@ -483,122 +379,30 @@ function collapse() {
         .start();
 }
 
-function generateHeight(width, height) {
-
-    const size = width * height, data = new Uint8Array(size),
-        perlin = new ImprovedNoise(), z = Math.random() * 100;
-
-    let quality = 1;
-
-    for (let j = 0; j < 4; j++) {
-
-        for (let i = 0; i < size; i++) {
-
-            const x = i % width, y = ~ ~(i / width);
-            data[i] += Math.abs(perlin.noise(x / quality, y / quality, z) * quality * 1.75);
-
-        }
-
-        quality *= 5;
-
-    }
-
-    return data;
-
-}
-
-async function CreateLine() {
-    const GeometryLine = await DrawTunnel();
-
-    // 使用 TextureLoader 加载 JPG 纹理
-    const loader = new THREE.TextureLoader();
-    const texture = loader.load('texture/green1.png'); // 替换为你的 JPG 图片路径
-    // 创建基础材质，使用加载的 JPG 纹理
-    const materialTest = new THREE.MeshBasicMaterial({ map: texture });
-
-    GeometryLine.forEach(lineSegment => {
-
-        if (lineSegment) {
-            const posArray = lineSegment.geometry.attributes.position.array;
-            const lineGeometry = new LineGeometry();
-            lineGeometry.setPositions(posArray);
-            // 创建金属绿色的材质
-            const lineMaterial = new LineMaterial({
-                color: 0x3b6a51, // 深绿色接近黑色
-                linewidth: 10,
-                transparent: true, // 如果需要透明度
-                opacity: 1, // 不透明度
-                // 其他金属质感的属性（假设支持）
-                metalness: 1.0, // 金属度
-                roughness: 0.1, // 粗糙度，调整以获得所需的质感
-            });
-            const mergedLineSegments = new Line2(lineGeometry, lineMaterial);
-
-            mergedLineSegments.position.set(-500, 1300, -400);
-            mergedLineSegments.scale.set(1, 1, 2);
-            mergedLineSegments.rotateX(Math.PI / 2);
-            scene.add(mergedLineSegments)
-        }
-
+// 更新所有地震点材质的深度检测状态
+function updateDotMaterials() {
+    quakeDots.forEach(dot => {
+        dot.material.depthTest = depthTestEnabled; // 根据状态更新深度检测
+        dot.material.needsUpdate = true; // 确保材质更新
     });
-
-
-}
-
-function createSides(geometryTop, geometryBottom) {
-    const sideVertices = [];
-    const topVertices = geometryTop.attributes.position.array;
-    const bottomVertices = geometryBottom.attributes.position.array;
-
-    for (let i = 0; i < topVertices.length; i += 3) {
-        const nextI = (i + 3) % topVertices.length;
-
-        // 获取四个顶点
-        const topVertex1 = new THREE.Vector3(topVertices[i], topVertices[i + 1], topVertices[i + 2] + 10);
-        const topVertex2 = new THREE.Vector3(topVertices[nextI], topVertices[nextI + 1], topVertices[nextI + 2] + 10);
-        const bottomVertex1 = new THREE.Vector3(bottomVertices[i], bottomVertices[i + 1], bottomVertices[i + 2] - 10);
-        const bottomVertex2 = new THREE.Vector3(bottomVertices[nextI], bottomVertices[nextI + 1], bottomVertices[nextI + 2] - 10);
-
-        // 按照逆时针顺序插入顶点，形成两个三角面
-        sideVertices.push(
-            topVertex1.x, topVertex1.y, topVertex1.z,
-            bottomVertex2.x, bottomVertex2.y, bottomVertex2.z,
-            topVertex2.x, topVertex2.y, topVertex2.z,
-
-            topVertex1.x, topVertex1.y, topVertex1.z,
-            bottomVertex1.x, bottomVertex1.y, bottomVertex1.z,
-            bottomVertex2.x, bottomVertex2.y, bottomVertex2.z
-        );
-    }
-
-    const sideGeometry = new THREE.BufferGeometry();
-    sideGeometry.setAttribute('position', new THREE.Float32BufferAttribute(sideVertices, 3));
-
-    // 使用双面材质以确保正确渲染
-    const sideMaterial = new THREE.MeshBasicMaterial({ color: 0x0, transparent: true, side: THREE.DoubleSide, opacity: 0.5 });
-    const sideMesh = new THREE.Mesh(sideGeometry, sideMaterial);
-
-    sideMesh.position.set(1600, 0, 120);
-    sideMesh.scale.set(8000, 4000, 1);
-    sideMesh.rotateX(Math.PI / 2);
-
-    scene.add(sideMesh);
-}
-
-function animate() {
-    requestAnimationFrame(animate);
-    tweenGroup.update();
-    render();
-}
-
-function render() {
-    renderer.render(scene, camera);
 }
 
 function basicInit() {
     container = document.getElementById('container');
     scene = new THREE.Scene();
     scene.background = new THREE.Color(0xffffff);
+
+    // 正交相机
+    // const aspect = window.innerWidth / window.innerHeight;
+    // const frustumSize = 1000;
+    // camera =new THREE.OrthographicCamera(
+    //     (frustumSize * aspect) / -2,
+    //     (frustumSize * aspect) / 2,
+    //     frustumSize / 2,
+    //     frustumSize / -2,
+    //     1,
+    //     10000
+    // );
 
     camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 1, 10000);
     camera.position.set(0, 200, 1500);
@@ -615,13 +419,6 @@ function basicInit() {
     controls.damping = 0.2;
     controls.addEventListener('change', render);
 
-    transformControl = new TransformControls(camera, renderer.domElement);
-    transformControl.addEventListener('change', render);
-    transformControl.size = 0.2
-    transformControl.addEventListener('dragging-changed', function (event) {
-        controls.enabled = !event.value;
-    });
-    scene.add(transformControl);
 
     // 创建一个立方体几何体和材质
     const geometry = new THREE.BoxGeometry(1600, 800, 800);
@@ -633,6 +430,15 @@ function basicInit() {
     scene.add(box);
 }
 
+function animate() {
+    requestAnimationFrame(animate);
+    tweenGroup.update();
+    render();
+}
+
+function render() {
+    renderer.render(scene, camera);
+}
 
 </script>
 
